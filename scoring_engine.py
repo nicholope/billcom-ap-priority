@@ -197,7 +197,7 @@ class ScoringEngine:
                 (b.get("due_date", "9999-12-31") for b in bills), default="N/A"
             )
             vendor["bill_ids"] = ", ".join(
-                str(b.get("id") or b.get("bill_id", "")) for b in bills
+                str(b.get("invoiceNumber") or b.get("invoice_number") or b.get("id", "")) for b in bills
             )
 
         vendor_list.sort(key=lambda v: v["vendor_score"], reverse=True)

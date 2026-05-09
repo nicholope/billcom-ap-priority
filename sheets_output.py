@@ -30,11 +30,11 @@ VENDOR_HEADERS = [
     "Rank", "Vendor Name", "Priority Band", "Total Score",
     "Exposure Score", "Urgency Score", "Concentration Score",
     "Total Unpaid ($)", "Open Bills", "Oldest Due Date",
-    "Approval Blocked", "Bill IDs",
+    "Approval Blocked", "Invoice Numbers",
 ]
 
 BILL_HEADERS = [
-    "Rank", "Bill ID", "Vendor Name", "Priority Band", "Bill Score",
+    "Rank", "Invoice #", "Vendor Name", "Priority Band", "Bill Score",
     "Due Date", "Days Until Due", "Unpaid Amount ($)", "Payment Method",
     "Approval Status", "Approval Blocked", "Overdue", "Notes",
 ]
@@ -137,7 +137,7 @@ class SheetsOutput:
             if b.get("payment_method_risk"): notes.append("Payment lead-time risk")
             rows.append([
                 rank,
-                str(b.get("id") or ""),
+                str(b.get("invoiceNumber") or b.get("invoice_number") or b.get("id") or ""),
                 b.get("vendor_name", ""),
                 b.get("priority_band", ""),
                 b.get("bill_score", 0),
