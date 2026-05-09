@@ -88,13 +88,11 @@ class ScoringEngine:
             )
             bill["vendor_id"] = bill.get("vendorId") or bill.get("vendor_id") or "UNKNOWN"
 
-            # Amount: Bill.com v3 uses dueAmount for unpaid balance
-            unpaid = float(
-                bill.get("dueAmount")
-                or bill.get("amountDue")
-                or bill.get("amount")
-                or 0
-            )
+            # Amount: dueAmount minus any vendor credits applied
+            # creditAmount should reduce the effective balance, not add to it
+            due = float(bill.get("dueAmount") or bill.get("amountDue") or bill.get("amount") or 0)
+            credit = float(bill.get("creditAmount") or 0)
+            unpaid = max(0.0, due - credit)
             bill["unpaid_amount"] = unpaid
             raw_exposure.append(unpaid)
 
