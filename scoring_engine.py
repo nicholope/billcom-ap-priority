@@ -57,9 +57,9 @@ def _normalize(values: list[float]) -> list[float]:
 # Bill.com paymentStatus codes
 _PAID_STATUSES = {"1", "paid", "partialPayment"}
 
-# Bill.com approvalStatus codes that mean blocked
-_BLOCKED_STATUSES = {"0", "1", "unassigned", "assigned", "approving"}
-_APPROVED_STATUSES = {"4", "approved"}
+# Bill.com v2 approvalStatus codes
+# 0=Unassigned, 1=Assigned, 2=Approving, 3=Approved, 4=Denied
+_APPROVED_STATUSES = {"3", "approved"}
 
 
 class ScoringEngine:
