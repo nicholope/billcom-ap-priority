@@ -179,12 +179,14 @@ class BillcomClient:
                     break
                 start += per_page
 
-        # Enrich with vendor names
+        # Enrich with vendor names and preferred payment method
         if all_bills:
             vendor_map = self._get_vendor_map()
             for bill in all_bills:
                 vid = bill.get("vendorId", "")
-                bill["vendorName"] = vendor_map.get(vid, "Unknown Vendor")
+                vendor_info = vendor_map.get(vid, {"name": "Unknown Vendor", "payment_method": "UNKNOWN"})
+                bill["vendorName"] = vendor_info["name"]
+                bill["paymentMethodType"] = vendor_info["payment_method"]
 
         logger.info(f"Total open bills with balance: {len(all_bills)}")
         return all_bills
@@ -208,13 +210,31 @@ class BillcomClient:
             if not vendors:
                 break
             for v in vendors:
-                vendor_map[v["id"]] = v.get("name", "Unknown Vendor")
+                vid = v["id"]
+                pref = str(v.get("prefPmtMethod") or "0")
+                vendor_map[vid] = {
+                    "name": v.get("name", "Unknown Vendor"),
+                    "payment_method": self._PREF_PMT_METHOD_MAP.get(pref, "UNKNOWN"),
+                }
             if len(vendors) < 100:
                 break
             start += 100
 
         logger.info(f"Loaded {len(vendor_map)} vendors.")
         return vendor_map
+
+    # Bill.com prefPmtMethod codes → normalized payment method string
+    _PREF_PMT_METHOD_MAP: dict[str, str] = {
+        "0": "UNKNOWN",
+        "1": "CHECK",
+        "2": "ACH",
+        "3": "CARD",
+        "4": "CARD",   # PayPal/virtual card
+        "5": "WIRE",
+        "6": "WIRE",
+        "7": "ACH",   # ePayment / ACH network
+        "8": "WIRE",
+    }
 
     def get_bill(self, bill_id: str) -> dict:
         """Fetch a single bill by ID."""
