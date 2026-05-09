@@ -171,6 +171,13 @@ class ScoringEngine:
             bills = vendor["bills"]
             total = vendor["total_unpaid"]
 
+            # Subtract unapplied vendor credits from total exposure
+            unapplied_credit = sum(
+                float(b.get("vendorUnappliedCredit") or 0) for b in bills[:1]
+            )  # credit is per-vendor, stored on first bill
+            vendor["unapplied_credit"] = round(unapplied_credit, 2)
+            vendor["total_unpaid"] = round(max(0.0, total - unapplied_credit), 2)
+            total = vendor["total_unpaid"]  # recalculate using net amount
             vendor["exposure_score"] = round(exp_score, 2)
             vendor["urgency_score"] = round(
                 sum(b["urgency_score"] * b["unpaid_amount"] for b in bills) / total

@@ -179,14 +179,16 @@ class BillcomClient:
                     break
                 start += per_page
 
-        # Enrich with vendor names and preferred payment method
+        # Enrich with vendor names, payment method, and unapplied credits
         if all_bills:
             vendor_map = self._get_vendor_map()
+            credit_map = self._get_vendor_credit_map()
             for bill in all_bills:
                 vid = bill.get("vendorId", "")
                 vendor_info = vendor_map.get(vid, {"name": "Unknown Vendor", "payment_method": "UNKNOWN"})
                 bill["vendorName"] = vendor_info["name"]
                 bill["paymentMethodType"] = vendor_info["payment_method"]
+                bill["vendorUnappliedCredit"] = credit_map.get(vid, 0.0)
 
         logger.info(f"Total open bills with balance: {len(all_bills)}")
         return all_bills
@@ -222,6 +224,43 @@ class BillcomClient:
 
         logger.info(f"Loaded {len(vendor_map)} vendors.")
         return vendor_map
+
+    def _get_vendor_credit_map(self) -> dict[str, float]:
+        """Return {vendorId: unapplied_credit_amount} from VendorCredit records."""
+        import json as _json
+
+        V2_URL = "https://api.bill.com/api/v2/List/VendorCredit.json"
+        credit_map: dict[str, float] = {}
+        start = 0
+
+        while True:
+            payload = {
+                "devKey": config.BILLCOM_DEV_KEY,
+                "sessionId": self._session_id,
+                "data": _json.dumps({
+                    "filters": [{"field": "isActive", "op": "=", "value": "1"}],
+                    "start": start,
+                    "max": 100,
+                }),
+            }
+            resp = self._http.post(V2_URL, data=payload, timeout=30)
+            credits = resp.json().get("response_data", [])
+            if not credits:
+                break
+            for vc in credits:
+                vid = vc.get("vendorId", "")
+                total = float(vc.get("amount") or 0)
+                applied = float(vc.get("appliedAmount") or 0)
+                unapplied = max(0.0, total - applied)
+                if unapplied > 0:
+                    credit_map[vid] = credit_map.get(vid, 0.0) + unapplied
+            if len(credits) < 100:
+                break
+            start += 100
+
+        total_credits = sum(credit_map.values())
+        logger.info(f"Loaded vendor credits for {len(credit_map)} vendors (${total_credits:,.2f} unapplied).")
+        return credit_map
 
     # Bill.com prefPmtMethod codes → normalized payment method string
     _PREF_PMT_METHOD_MAP: dict[str, str] = {

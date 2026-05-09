@@ -29,7 +29,7 @@ PRIORITY_COLORS = {
 VENDOR_HEADERS = [
     "Rank", "Vendor Name", "Priority Band", "Total Score",
     "Exposure Score", "Urgency Score", "Concentration Score",
-    "Total Unpaid ($)", "Open Bills", "Oldest Due Date",
+    "Total Unpaid ($)", "Unapplied Credits ($)", "Net Exposure ($)", "Open Bills", "Oldest Due Date",
     "Approval Blocked", "Invoice Numbers",
 ]
 
@@ -114,7 +114,9 @@ class SheetsOutput:
                 v.get("exposure_score", 0),
                 v.get("urgency_score", 0),
                 v.get("concentration_score", 0),
-                round(v.get("total_unpaid", 0), 2),
+                round(v.get("total_unpaid", 0) + v.get("unapplied_credit", 0), 2),  # gross
+                round(v.get("unapplied_credit", 0), 2),
+                round(v.get("total_unpaid", 0), 2),  # net after credits
                 v.get("open_bill_count", 0),
                 v.get("oldest_due_date", ""),
                 "Yes" if v.get("approval_blocked") else "No",
