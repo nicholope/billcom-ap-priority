@@ -106,52 +106,115 @@ class BillcomClient:
 
     def get_open_bills(self, max_pages: int = 20) -> list[dict]:
         """
-        Fetch all open (unpaid) bills from Bill.com.
+        Fetch all open (unpaid/partial) bills using the Bill.com v2 List API.
 
-        Bill.com v3 uses cursor-based pagination via nextPage/prevPage tokens.
-        Filters client-side for unpaid bills.
+        The v2 API supports server-side filtering by paymentStatus:
+          1 = Unpaid (open, nothing paid yet)
+          2 = Partial (partially paid, dueAmount > 0)
+        Sorted by dueDate ascending so most urgent bills come first.
         """
-        PAID_STATUSES = {"1", "paid"}
+        import json as _json
 
+        if not self._session_id:
+            self.login()
+
+        V2_URL = "https://api.bill.com/api/v2/List/Bill.json"
         all_bills: list[dict] = []
-        next_cursor: str | None = None
-        page_num = 0
 
-        for _ in range(max_pages):
-            params: dict = {"limit": 100}
-            if next_cursor:
-                params["page"] = next_cursor
+        for status_val in ["1", "2"]:  # 1=Unpaid, 2=Partial
+            start = 0
+            per_page = 100
+            page_num = 0
 
-            data = self._get("/bills", params=params)
-            # Bill.com v3 returns results in 'results' key
-            bills = (
-                data if isinstance(data, list)
-                else (data.get("results") or data.get("data") or [])
-            )
+            for _ in range(max_pages):
+                payload = {
+                    "devKey": config.BILLCOM_DEV_KEY,
+                    "sessionId": self._session_id or "",
+                    "data": _json.dumps({
+                        "filters": [
+                            {"field": "paymentStatus", "op": "=", "value": status_val},
+                            {"field": "isActive", "op": "=", "value": "1"},
+                            {"field": "dueDate", "op": ">=", "value": "2025-01-01"},
+                        ],
+                        "start": start,
+                        "max": per_page,
+                        "sort": [{"field": "dueDate", "asc": True}],
+                    }),
+                }
+                resp = self._http.post(V2_URL, data=payload, timeout=30)
 
-            if not bills:
-                break
+                if resp.status_code == 401:
+                    logger.warning("Session expired — re-authenticating.")
+                    self.login()
+                    payload["sessionId"] = self._session_id
+                    resp = self._http.post(V2_URL, data=payload, timeout=30)
 
-            page_num += 1
-            open_bills = [
-                b for b in bills
-                if b.get("paymentStatus", "").upper() not in PAID_STATUSES
-                and float(b.get("dueAmount") or 0) > 0
-                and not b.get("archived", False)
-            ]
-            all_bills.extend(open_bills)
-            logger.info(
-                f"Page {page_num}: {len(bills)} fetched, {len(open_bills)} open "
-                f"(total: {len(all_bills)})"
-            )
+                if resp.status_code != 200:
+                    raise BillcomAPIError(
+                        f"v2 List/Bill failed [{resp.status_code}]: {resp.text}"
+                    )
 
-            # Bill.com v3 cursor-based pagination via 'nextPage'
-            next_cursor = data.get("nextPage") if isinstance(data, dict) else None
-            if not next_cursor or len(bills) < 100:
-                break
+                body = resp.json()
+                if body.get("response_status") != 0:
+                    raise BillcomAPIError(
+                        f"v2 List/Bill error: {body.get('response_data', {}).get('error_message')}"
+                    )
 
-        logger.info(f"Total open bills: {len(all_bills)}")
+                bills = body.get("response_data", [])
+                page_num += 1
+
+                # Keep only bills with actual outstanding balance
+                open_bills = [
+                    b for b in bills
+                    if float(b.get("dueAmount") or 0) > 0
+                    and b.get("isActive") == "1"
+                ]
+                all_bills.extend(open_bills)
+                logger.info(
+                    f"status={status_val} page={page_num}: {len(bills)} fetched, "
+                    f"{len(open_bills)} with balance (total: {len(all_bills)})"
+                )
+
+                if len(bills) < per_page:
+                    break
+                start += per_page
+
+        # Enrich with vendor names
+        if all_bills:
+            vendor_map = self._get_vendor_map()
+            for bill in all_bills:
+                vid = bill.get("vendorId", "")
+                bill["vendorName"] = vendor_map.get(vid, "Unknown Vendor")
+
+        logger.info(f"Total open bills with balance: {len(all_bills)}")
         return all_bills
+
+    def _get_vendor_map(self) -> dict[str, str]:
+        """Return a dict of {vendorId: vendorName} using the v2 List API."""
+        import json as _json
+
+        V2_URL = "https://api.bill.com/api/v2/List/Vendor.json"
+        vendor_map: dict[str, str] = {}
+        start = 0
+
+        while True:
+            payload = {
+                "devKey": config.BILLCOM_DEV_KEY,
+                "sessionId": self._session_id,
+                "data": _json.dumps({"start": start, "max": 100}),
+            }
+            resp = self._http.post(V2_URL, data=payload, timeout=30)
+            vendors = resp.json().get("response_data", [])
+            if not vendors:
+                break
+            for v in vendors:
+                vendor_map[v["id"]] = v.get("name", "Unknown Vendor")
+            if len(vendors) < 100:
+                break
+            start += 100
+
+        logger.info(f"Loaded {len(vendor_map)} vendors.")
+        return vendor_map
 
     def get_bill(self, bill_id: str) -> dict:
         """Fetch a single bill by ID."""
