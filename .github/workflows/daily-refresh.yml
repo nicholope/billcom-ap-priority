@@ -1,0 +1,45 @@
+name: AP Priority Daily Refresh
+
+on:
+  schedule:
+    # Runs at 7:00 AM MST (14:00 UTC) Monday–Friday
+    - cron: '0 14 * * 1-5'
+  workflow_dispatch:
+    # Also allows manual trigger from GitHub Actions UI
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Write Google credentials
+        # credentials.json is stored as a base64-encoded secret
+        run: |
+          echo "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" | base64 --decode > credentials.json
+
+      - name: Run AP priority refresh
+        env:
+          BILLCOM_DEV_KEY:          ${{ secrets.BILLCOM_DEV_KEY }}
+          BILLCOM_API_TOKEN:        ${{ secrets.BILLCOM_API_TOKEN }}
+          BILLCOM_USERNAME:         ${{ secrets.BILLCOM_USERNAME }}
+          BILLCOM_ORG_ID:           ${{ secrets.BILLCOM_ORG_ID }}
+          BILLCOM_ENVIRONMENT:      production
+          GOOGLE_CREDENTIALS_FILE:  credentials.json
+          GOOGLE_SPREADSHEET_ID:    ${{ secrets.GOOGLE_SPREADSHEET_ID }}
+        run: python main.py
+
+      - name: Clean up credentials
+        if: always()
+        run: rm -f credentials.json
