@@ -2,7 +2,7 @@
 
 A Python-based accounts payable prioritization engine that connects to the [BILL API](https://developer.bill.com), scores open bills by payment urgency, and publishes a live ranked priority queue to Google Sheets — giving finance teams a single daily view of what to approve and pay first.
 
-Built as a portfolio project demonstrating practical finance automation with live API integrations, explainable scoring models, real-time webhook processing, and automated reporting.
+Built as a portfolio project demonstrating practical finance automation with live API integrations, explainable scoring models, automated scheduling via GitHub Actions, and automated reporting.
 
 ---
 
@@ -17,14 +17,14 @@ This tool solves that with a weighted, explainable priority model that accounts 
 ## How It Works
 
 1. **Authenticates** with the BILL API using API Sync Token (no password stored)
-2. **Pulls open bills** (unpaid + partial) from 2025 onward via the BILL v2 List API
+2. **Pulls open bills** (unpaid + partial) via the BILL v2 List API
 3. **Fetches vendor records** to enrich bills with preferred payment method
 4. **Fetches vendor credits** and subtracts unapplied balances from net exposure
 5. **Scores each bill** on an urgency curve based on due date, payment method lead time, and approval status
 6. **Rolls up to vendor level** using a weighted composite score
 7. **Assigns priority bands** — 🔴 CRITICAL / 🟠 HIGH / 🟡 MEDIUM / 🟢 LOW
 8. **Writes to Google Sheets** with color-coded formatting, frozen headers, and a run timestamp
-9. **Listens for webhooks** (FastAPI) to re-score in real time when bills change in BILL
+9. **Runs automatically** on a schedule via GitHub Actions
 
 ---
 
@@ -90,7 +90,7 @@ Unapplied vendor credit balances are fetched from the BILL `VendorCredit` entity
 ============================================================
 ```
 
-**Google Sheet (auto-updated on each run or webhook event):**
+**Google Sheet (auto-updated on each scheduled run):**
 
 | Tab | Contents |
 |---|---|
@@ -98,6 +98,14 @@ Unapplied vendor credit balances are fetched from the BILL `VendorCredit` entity
 | **Bill Queue** | Every open bill ranked by urgency with invoice number, due date, days until due, payment method, blocker flags |
 
 Priority band cells are color-coded (red → orange → yellow → green) for at-a-glance review.
+
+---
+
+## Automation
+
+The sheet refreshes automatically on a schedule via **GitHub Actions**. No server or local machine required — runs entirely in the cloud. The workflow can also be triggered manually at any time from the GitHub Actions tab.
+
+See `.github/workflows/daily-refresh.yml` for the workflow definition.
 
 ---
 
@@ -147,8 +155,24 @@ BILLCOM_ENVIRONMENT=production   # or sandbox
 
 GOOGLE_CREDENTIALS_FILE=credentials.json
 GOOGLE_SPREADSHEET_ID=your_sheet_id
+```
 
-WEBHOOK_SECRET_KEY=              # populated after webhook registration
+### 5. GitHub Actions setup
+
+Add the following secrets to your repository (Settings → Secrets and variables → Actions):
+
+| Secret | Description |
+|---|---|
+| `BILLCOM_DEV_KEY` | Your BILL developer key |
+| `BILLCOM_API_TOKEN` | Your BILL API Sync Token |
+| `BILLCOM_USERNAME` | Your BILL login email |
+| `BILLCOM_ORG_ID` | Your BILL organization ID |
+| `GOOGLE_SPREADSHEET_ID` | Target Google Sheet ID |
+| `GOOGLE_CREDENTIALS_JSON` | Base64-encoded contents of `credentials.json` |
+
+To encode your credentials file:
+```bash
+base64 -i credentials.json
 ```
 
 ---
@@ -164,40 +188,7 @@ python main.py --mock
 
 # Console output only, skip Sheets
 python main.py --mock --no-sheets
-
-# Start the FastAPI webhook listener
-python main.py --serve
-
-# Register a BILL webhook subscription
-python main.py --subscribe https://your-public-url.com/webhook/billcom
 ```
-
----
-
-## Webhook Setup
-
-The webhook listener (FastAPI) receives real-time bill lifecycle events from BILL and automatically re-scores and updates the Google Sheet.
-
-**Supported events:** `bill.created`, `bill.updated`, `bill.archived`, `payment.updated`, `payment.failed`
-
-### Local testing with ngrok
-
-```bash
-# Terminal 1 — start the listener
-python main.py --serve
-
-# Terminal 2 — expose it publicly
-ngrok http 8000
-
-# Terminal 3 — register the subscription (use the ngrok URL)
-python main.py --subscribe https://abc123.ngrok.io/webhook/billcom
-```
-
-After registration, copy the `securityKey` from the output into your `.env` as `WEBHOOK_SECRET_KEY`. BILL will then POST signed event notifications to your endpoint whenever a bill changes.
-
-### Production deployment
-
-Deploy to any cloud provider (Railway, Render, Fly.io) and register your permanent URL as the webhook endpoint. The app verifies each webhook's HMAC-SHA256 signature before processing.
 
 ---
 
@@ -205,13 +196,15 @@ Deploy to any cloud provider (Railway, Render, Fly.io) and register your permane
 
 ```
 billcom-ap-priority/
-├── main.py              # Orchestrator — fetch, score, output, serve
-├── billcom_client.py    # BILL API client (v2 + v3, session auth, credits)
-├── scoring_engine.py    # Bill-level and vendor-level scoring logic
-├── sheets_output.py     # Google Sheets writer with formatting
-├── webhook.py           # FastAPI webhook listener
-├── mock_data.py         # Realistic demo data
-├── config.py            # Environment config and scoring constants
+├── .github/workflows/
+│   └── daily-refresh.yml    # GitHub Actions scheduled workflow
+├── main.py                  # Orchestrator — fetch, score, output
+├── billcom_client.py        # BILL API client (v2 session auth, credits)
+├── scoring_engine.py        # Bill-level and vendor-level scoring logic
+├── sheets_output.py         # Google Sheets writer with formatting
+├── webhook.py               # FastAPI webhook listener (optional)
+├── mock_data.py             # Realistic demo data
+├── config.py                # Environment config and scoring constants
 ├── requirements.txt
 ├── .env.example
 └── .gitignore
@@ -236,9 +229,8 @@ All scoring weights and thresholds are in `config.py`:
 
 ## Security
 
-- All credentials are stored in `.env` — excluded from version control via `.gitignore`
+- All credentials stored in `.env` — excluded from version control via `.gitignore`
 - API Sync Token used instead of password — can be revoked independently
-- Webhook payloads verified with HMAC-SHA256 signature before processing
 - Read-only BILL integration — the tool never creates, modifies, or pays bills
 - All payment decisions remain human-controlled
 
@@ -246,8 +238,8 @@ All scoring weights and thresholds are in `config.py`:
 
 ## Roadmap
 
-- [ ] Scheduled daily refresh (cron / cloud scheduler)
-- [ ] Slack / email daily digest
+- [ ] Real-time updates via BILL webhooks + FastAPI listener
+- [ ] Slack / email digest
 - [ ] Claude-generated natural language summaries ("Why is this vendor critical?")
 - [ ] Cash-constrained payment optimizer
 - [ ] Historical score tracking and trend visualization
