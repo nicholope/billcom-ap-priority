@@ -169,31 +169,46 @@ class ScoringEngine:
 
         for vendor, exp_score in zip(vendor_list, norm_unpaid):
             bills = vendor["bills"]
-            total = vendor["total_unpaid"]
+            gross_total = vendor["total_unpaid"]  # sum of bill-level unpaid amounts (pre-vendor-credit)
 
-            # Subtract unapplied vendor credits from total exposure
+            # Subtract unapplied vendor credits from total exposure for display/exposure only.
+            # IMPORTANT: urgency and concentration denominators must use gross_total so that
+            # the weighted-average and ratio calculations stay bounded at 0–100.
+            # Using net_total as the denominator while numerators remain gross causes both
+            # scores to exceed 100 when unapplied credits are significant.
             unapplied_credit = sum(
                 float(b.get("vendorUnappliedCredit") or 0) for b in bills[:1]
             )  # credit is per-vendor, stored on first bill
             vendor["unapplied_credit"] = round(unapplied_credit, 2)
-            vendor["total_unpaid"] = round(max(0.0, total - unapplied_credit), 2)
-            total = vendor["total_unpaid"]  # recalculate using net amount
+            net_total = max(0.0, gross_total - unapplied_credit)
+            vendor["total_unpaid"] = round(net_total, 2)
+
             vendor["exposure_score"] = round(exp_score, 2)
+
+            # Urgency: amount-weighted average using gross bill amounts as weights.
+            # Denominator must also be gross_total to keep the result in [0, 100].
             vendor["urgency_score"] = round(
-                sum(b["urgency_score"] * b["unpaid_amount"] for b in bills) / total
-                if total > 0
+                sum(b["urgency_score"] * b["unpaid_amount"] for b in bills) / gross_total
+                if gross_total > 0
                 else sum(b["urgency_score"] for b in bills) / len(bills),
                 2,
             )
+
+            # Concentration: largest overdue bill as % of gross vendor exposure.
+            # Using gross_total as denominator keeps this in [0, 100].
             overdue = [b for b in bills if b["is_overdue"]]
             largest_overdue = max((b["unpaid_amount"] for b in overdue), default=0.0)
             vendor["concentration_score"] = round(
-                (largest_overdue / total * 100) if total > 0 else 0.0, 2
+                (largest_overdue / gross_total * 100) if gross_total > 0 else 0.0, 2
             )
+
             vendor["vendor_score"] = round(
-                config.WEIGHT_EXPOSURE * vendor["exposure_score"]
-                + config.WEIGHT_URGENCY * vendor["urgency_score"]
-                + config.WEIGHT_CONCENTRATION * vendor["concentration_score"],
+                min(
+                    100.0,
+                    config.WEIGHT_EXPOSURE * vendor["exposure_score"]
+                    + config.WEIGHT_URGENCY * vendor["urgency_score"]
+                    + config.WEIGHT_CONCENTRATION * vendor["concentration_score"],
+                ),
                 2,
             )
             vendor["priority_band"] = self.classify_priority(vendor["vendor_score"])
