@@ -30,7 +30,7 @@ VENDOR_HEADERS = [
     "Rank", "Vendor Name", "Priority Band", "Total Score",
     "Exposure Score", "Urgency Score", "Concentration Score",
     "Total Unpaid ($)", "Unapplied Credits ($)", "Net Exposure ($)", "Open Bills", "Oldest Due Date",
-    "Approval Blocked", "Invoice Numbers",
+    "Approval Blocked", "Invoice Numbers", "Vendor ID",
 ]
 
 BILL_HEADERS = [
@@ -121,6 +121,7 @@ class SheetsOutput:
                 v.get("oldest_due_date", ""),
                 "Yes" if v.get("approval_blocked") else "No",
                 v.get("bill_ids", ""),
+                v.get("vendor_id", ""),
             ])
         ws.update([VENDOR_HEADERS] + rows, value_input_option="USER_ENTERED")
         self._apply_header_format(ws, len(VENDOR_HEADERS))
