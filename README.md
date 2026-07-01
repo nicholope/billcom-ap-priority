@@ -22,9 +22,10 @@ This tool solves that with a weighted, explainable priority model that accounts 
 4. **Fetches vendor credits** and subtracts unapplied balances from net exposure
 5. **Scores each bill** on an urgency curve based on due date, payment method lead time, and approval status
 6. **Rolls up to vendor level** using a weighted composite score
-7. **Assigns priority bands** — 🔴 CRITICAL / 🟠 HIGH / 🟡 MEDIUM / 🟢 LOW
-8. **Writes to Google Sheets** with color-coded formatting, frozen headers, and a run timestamp
-9. **Runs automatically** on a schedule via GitHub Actions
+7. **Applies per-vendor overrides** — optional weight tweaks, score multipliers, and a guaranteed HIGH-priority floor for strategic vendors
+8. **Assigns priority bands** — 🔴 CRITICAL / 🟠 HIGH / 🟡 MEDIUM / 🟢 LOW
+9. **Writes to Google Sheets** with color-coded formatting, frozen headers, and a run timestamp
+10. **Runs automatically** on a schedule via GitHub Actions
 
 ---
 
@@ -62,6 +63,46 @@ Unapplied vendor credit balances are fetched from the BILL `VendorCredit` entity
 
 ---
 
+## Vendor Overrides (Strategic Boosts)
+
+Some vendors matter more than their raw numbers suggest — a key supplier, a relationship the business can't afford to jeopardize, a contract with strict payment terms. `vendor_overrides.json` lets you override the model on a per-vendor basis without touching the global weights.
+
+Key each entry by BILL vendor ID (visible in the **Vendor ID** column of the sheet):
+
+```json
+{
+  "00901FUYHECHTVYil3vg": { "score_multiplier": 1.50 },
+  "00901MMDDPPYZX3d54er": { "score_multiplier": 1.50 }
+}
+```
+
+| Field | Effect |
+|---|---|
+| `weight_exposure` | Replaces `WEIGHT_EXPOSURE` for this vendor |
+| `weight_urgency` | Replaces `WEIGHT_URGENCY` for this vendor |
+| `weight_concentration` | Replaces `WEIGHT_CONCENTRATION` for this vendor |
+| `score_multiplier` | Multiplies the final composite score (`1.0` = no change, `1.50` = +50%) |
+
+Any omitted field falls back to the global weights in `config.py`.
+
+### Guaranteed HIGH-Priority Floor
+
+A multiplier alone isn't enough to promote a genuinely low-scoring vendor — a vendor naturally at 30 × 1.50 = 45 still lands in MEDIUM. So **any vendor listed in `vendor_overrides.json` is guaranteed a minimum band of HIGH**: after the multiplier runs, the score is floored at `PRIORITY_HIGH_THRESHOLD` (60.0).
+
+| Base Score | × 1.50 | Floor Applied? | Final Score | Band |
+|---|---|---|---|---|
+| 30 | 45.0 | ✅ → 60.0 | 60.0 | **HIGH** |
+| 50 | 75.0 | — already above | 75.0 | **HIGH** |
+| 65 | 97.5 | — already above | 97.5 | **CRITICAL** |
+
+The multiplier still matters for ranking *within* the HIGH/CRITICAL band; the floor only guarantees an override vendor never falls below HIGH. Because the displayed **Total Score** is the floored value, the score in the sheet always matches the assigned band.
+
+### Boosted Column
+
+The Vendor Priority sheet includes a **Boosted** column flagging every override vendor with `⬆ Yes` on a cornflower-blue fill. On each run, that column is fully re-formatted — boosted cells are painted, all others are explicitly reset to white — so a highlight never lingers on a vendor after ranks shift between runs.
+
+---
+
 ## Output
 
 **Console summary on each run:**
@@ -94,7 +135,7 @@ Unapplied vendor credit balances are fetched from the BILL `VendorCredit` entity
 
 | Tab | Contents |
 |---|---|
-| **Vendor Priority** | Ranked vendors with composite score, gross unpaid, unapplied credits, net exposure, approval flag |
+| **Vendor Priority** | Ranked vendors with composite score, boost flag, gross unpaid, unapplied credits, net exposure, approval flag |
 | **Bill Queue** | Every open bill ranked by urgency with invoice number, due date, days until due, payment method, blocker flags |
 
 Priority band cells are color-coded (red → orange → yellow → green) for at-a-glance review.
@@ -200,8 +241,9 @@ billcom-ap-priority/
 │   └── daily-refresh.yml    # GitHub Actions scheduled workflow
 ├── main.py                  # Orchestrator — fetch, score, output
 ├── billcom_client.py        # BILL API client (v2 session auth, credits)
-├── scoring_engine.py        # Bill-level and vendor-level scoring logic
+├── scoring_engine.py        # Bill-level and vendor-level scoring logic (incl. override floor)
 ├── sheets_output.py         # Google Sheets writer with formatting
+├── vendor_overrides.json    # Per-vendor weight/multiplier overrides + HIGH floor
 ├── webhook.py               # FastAPI webhook listener (optional)
 ├── mock_data.py             # Realistic demo data
 ├── config.py                # Environment config and scoring constants
@@ -224,6 +266,8 @@ All scoring weights and thresholds are in `config.py`:
 | `PRIORITY_CRITICAL_THRESHOLD` | 80 | Minimum score for CRITICAL band |
 | `PRIORITY_HIGH_THRESHOLD` | 60 | Minimum score for HIGH band |
 | `PRIORITY_MEDIUM_THRESHOLD` | 40 | Minimum score for MEDIUM band |
+
+Per-vendor overrides live separately in `vendor_overrides.json` (see [Vendor Overrides](#vendor-overrides-strategic-boosts) above).
 
 ---
 
