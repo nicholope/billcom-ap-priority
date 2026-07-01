@@ -75,6 +75,62 @@ class SheetsOutput:
             },
         )
 
+    def _format_vendor_columns(self, ws: gspread.Worksheet, num_rows: int) -> None:
+        """Explicitly set number/currency formats on data columns.
+
+        Runs after every write so stale column formatting from prior layouts
+        can never bleed onto the wrong column (ws.clear() wipes values, not formats).
+
+        Column map (1-based, post-Boosted-column addition):
+          5-8  (E-H): score floats   → NUMBER  0.00
+          9-11 (I-K): dollar amounts → CURRENCY $#,##0.00
+          12   (L):   open bill count → INTEGER 0
+        """
+        if num_rows == 0:
+            return
+
+        def cell_range(col: int) -> dict:
+            return {
+                "sheetId": ws.id,
+                "startRowIndex": 1,          # skip header row
+                "endRowIndex": num_rows + 1,
+                "startColumnIndex": col - 1,
+                "endColumnIndex": col,
+            }
+
+        requests = []
+
+        # Score columns E–H (5–8): plain number, 2 decimal places
+        for col in range(5, 9):
+            requests.append({
+                "repeatCell": {
+                    "range": cell_range(col),
+                    "cell": {"userEnteredFormat": {"numberFormat": {"type": "NUMBER", "pattern": "0.00"}}},
+                    "fields": "userEnteredFormat.numberFormat",
+                }
+            })
+
+        # Dollar columns I–K (9–11): currency
+        for col in range(9, 12):
+            requests.append({
+                "repeatCell": {
+                    "range": cell_range(col),
+                    "cell": {"userEnteredFormat": {"numberFormat": {"type": "CURRENCY", "pattern": "\"$\"#,##0.00"}}},
+                    "fields": "userEnteredFormat.numberFormat",
+                }
+            })
+
+        # Open Bills L (12): integer
+        requests.append({
+            "repeatCell": {
+                "range": cell_range(12),
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "NUMBER", "pattern": "0"}}},
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        })
+
+        self._spreadsheet.batch_update({"requests": requests})
+
     def _color_boosted_column(
         self, ws: gspread.Worksheet, col_index: int, rows: list[list[Any]]
     ) -> None:
@@ -156,6 +212,7 @@ class SheetsOutput:
             ])
         ws.update([VENDOR_HEADERS] + rows, value_input_option="USER_ENTERED")
         self._apply_header_format(ws, len(VENDOR_HEADERS))
+        self._format_vendor_columns(ws, num_rows=len(rows))
         self._color_priority_column(ws, col_index=3, rows=rows)
         self._color_boosted_column(ws, col_index=4, rows=rows)
         ws.update_cell(len(rows) + 3, 1, f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

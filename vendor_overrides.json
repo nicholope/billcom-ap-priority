@@ -4,18 +4,18 @@
     "weight_exposure":       "0.0–1.0  — replaces WEIGHT_EXPOSURE for this vendor",
     "weight_urgency":        "0.0–1.0  — replaces WEIGHT_URGENCY for this vendor",
     "weight_concentration":  "0.0–1.0  — replaces WEIGHT_CONCENTRATION for this vendor",
-    "score_multiplier":      ">0       — final score multiplier (1.0 = no change, 1.25 = +25%)"
+    "score_multiplier":      ">0       — final score multiplier (1.0 = no change, 1.50 = +50%)"
   },
   "00901FUYHECHTVYil3vg": {
-    "score_multiplier": 1.25
+    "score_multiplier": 1.50
   },
   "00901MMDDPPYZX3d54er": {
-    "score_multiplier": 1.25
+    "score_multiplier": 1.50
   },
   "00901WQBPCDNSP3ckbuy": {
-    "score_multiplier": 1.25
+    "score_multiplier": 1.50
   },
   "00901BYMXKOQLF3hgziz": {
-    "score_multiplier": 1.25
+    "score_multiplier": 1.50
   }
 }
