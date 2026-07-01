@@ -202,12 +202,20 @@ class ScoringEngine:
                 (largest_overdue / gross_total * 100) if gross_total > 0 else 0.0, 2
             )
 
+            # Per-vendor weight overrides — fall back to global weights if not set.
+            _ov = config.VENDOR_OVERRIDES.get(vid, {})
+            w_exp = _ov.get("weight_exposure",      config.WEIGHT_EXPOSURE)
+            w_urg = _ov.get("weight_urgency",       config.WEIGHT_URGENCY)
+            w_con = _ov.get("weight_concentration", config.WEIGHT_CONCENTRATION)
+            multiplier = _ov.get("score_multiplier", 1.0)
             vendor["vendor_score"] = round(
                 min(
                     100.0,
-                    config.WEIGHT_EXPOSURE * vendor["exposure_score"]
-                    + config.WEIGHT_URGENCY * vendor["urgency_score"]
-                    + config.WEIGHT_CONCENTRATION * vendor["concentration_score"],
+                    (
+                        w_exp * vendor["exposure_score"]
+                        + w_urg * vendor["urgency_score"]
+                        + w_con * vendor["concentration_score"]
+                    ) * multiplier,
                 ),
                 2,
             )

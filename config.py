@@ -2,8 +2,12 @@
 Configuration and constants for the Bill.com AP Priority Tool.
 """
 
+import json
+import logging
 import os
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -56,3 +60,25 @@ PAYMENT_LEAD_TIMES: dict[str, int] = {
     "CARD": 0,
     "UNKNOWN": 2,
 }
+
+# --- Per-Vendor Score Overrides ---
+# Path can be overridden via env var; defaults to vendor_overrides.json in the project root.
+VENDOR_OVERRIDES_FILE: str = os.getenv("VENDOR_OVERRIDES_FILE", "vendor_overrides.json")
+
+
+def _load_vendor_overrides(path: str) -> dict:
+    """Load vendor_overrides.json; silently returns {} if the file is missing or malformed."""
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        # Strip comment/schema keys (underscore-prefixed) so callers get only real vendor entries.
+        return {k: v for k, v in data.items() if not k.startswith("_")}
+    except FileNotFoundError:
+        logger.debug("vendor_overrides.json not found — using global weights for all vendors.")
+        return {}
+    except json.JSONDecodeError as exc:
+        logger.warning("vendor_overrides.json parse error (%s) — using global weights for all vendors.", exc)
+        return {}
+
+
+VENDOR_OVERRIDES: dict = _load_vendor_overrides(VENDOR_OVERRIDES_FILE)
