@@ -168,6 +168,7 @@ class ScoringEngine:
         norm_unpaid = _normalize(unpaid_vals)
 
         for vendor, exp_score in zip(vendor_list, norm_unpaid):
+            vid = vendor["vendor_id"]  # re-bind per-vendor (do not rely on outer-loop var)
             bills = vendor["bills"]
             gross_total = vendor["total_unpaid"]  # sum of bill-level unpaid amounts (pre-vendor-credit)
 
