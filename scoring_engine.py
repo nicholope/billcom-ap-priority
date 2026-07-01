@@ -208,7 +208,7 @@ class ScoringEngine:
             w_urg = _ov.get("weight_urgency",       config.WEIGHT_URGENCY)
             w_con = _ov.get("weight_concentration", config.WEIGHT_CONCENTRATION)
             multiplier = _ov.get("score_multiplier", 1.0)
-            vendor["vendor_score"] = round(
+            raw_score = round(
                 min(
                     100.0,
                     (
@@ -219,6 +219,12 @@ class ScoringEngine:
                 ),
                 2,
             )
+            # Vendors in VENDOR_OVERRIDES are guaranteed at least HIGH priority.
+            # The score floor ensures the displayed score always matches the band.
+            # Vendors that naturally score higher (HIGH or CRITICAL) are unaffected.
+            if vid in config.VENDOR_OVERRIDES:
+                raw_score = max(raw_score, config.PRIORITY_HIGH_THRESHOLD)
+            vendor["vendor_score"] = round(raw_score, 2)
             vendor["priority_band"] = self.classify_priority(vendor["vendor_score"])
             vendor["open_bill_count"] = len(bills)
             vendor["oldest_due_date"] = min(
