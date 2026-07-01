@@ -134,28 +134,33 @@ class SheetsOutput:
     def _color_boosted_column(
         self, ws: gspread.Worksheet, col_index: int, rows: list[list[Any]]
     ) -> None:
-        """Highlight the Boosted cell in cornflower blue for any vendor with an active override."""
+        """Highlight boosted cells cornflower blue; explicitly reset all others to plain white.
+
+        ws.clear() wipes values but not cell formatting, so stale colors from a prior run
+        survive the rewrite. Explicitly setting every data row on each run prevents ghost
+        highlights from sticking to vendors that are no longer in vendor_overrides.
+        """
         requests = []
         for row_num, row in enumerate(rows, start=2):
-            if row[col_index - 1] == "\u2b06 Yes":
-                requests.append({
-                    "repeatCell": {
-                        "range": {
-                            "sheetId": ws.id,
-                            "startRowIndex": row_num - 1,
-                            "endRowIndex": row_num,
-                            "startColumnIndex": col_index - 1,
-                            "endColumnIndex": col_index,
-                        },
-                        "cell": {
-                            "userEnteredFormat": {
-                                "backgroundColor": BOOSTED_COLOR,
-                                "textFormat": {"bold": True},
-                            }
-                        },
-                        "fields": "userEnteredFormat(backgroundColor,textFormat)",
-                    }
-                })
+            is_boosted = row[col_index - 1] == "\u2b06 Yes"
+            requests.append({
+                "repeatCell": {
+                    "range": {
+                        "sheetId": ws.id,
+                        "startRowIndex": row_num - 1,
+                        "endRowIndex": row_num,
+                        "startColumnIndex": col_index - 1,
+                        "endColumnIndex": col_index,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "backgroundColor": BOOSTED_COLOR if is_boosted else {"red": 1.0, "green": 1.0, "blue": 1.0},
+                            "textFormat": {"bold": is_boosted},
+                        }
+                    },
+                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
+                }
+            })
         if requests:
             self._spreadsheet.batch_update({"requests": requests})
 
