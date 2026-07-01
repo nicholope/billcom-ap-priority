@@ -26,8 +26,10 @@ PRIORITY_COLORS = {
     "LOW":      {"red": 0.565, "green": 0.933, "blue": 0.565},
 }
 
+BOOSTED_COLOR = {"red": 0.635, "green": 0.769, "blue": 0.953}  # cornflower blue
+
 VENDOR_HEADERS = [
-    "Rank", "Vendor Name", "Priority Band", "Total Score",
+    "Rank", "Vendor Name", "Priority Band", "Boosted", "Total Score",
     "Exposure Score", "Urgency Score", "Concentration Score",
     "Total Unpaid ($)", "Unapplied Credits ($)", "Net Exposure ($)", "Open Bills", "Oldest Due Date",
     "Approval Blocked", "Invoice Numbers", "Vendor ID",
@@ -73,6 +75,34 @@ class SheetsOutput:
             },
         )
 
+    def _color_boosted_column(
+        self, ws: gspread.Worksheet, col_index: int, rows: list[list[Any]]
+    ) -> None:
+        """Highlight the Boosted cell in cornflower blue for any vendor with an active override."""
+        requests = []
+        for row_num, row in enumerate(rows, start=2):
+            if row[col_index - 1] == "\u2b06 Yes":
+                requests.append({
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": ws.id,
+                            "startRowIndex": row_num - 1,
+                            "endRowIndex": row_num,
+                            "startColumnIndex": col_index - 1,
+                            "endColumnIndex": col_index,
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "backgroundColor": BOOSTED_COLOR,
+                                "textFormat": {"bold": True},
+                            }
+                        },
+                        "fields": "userEnteredFormat(backgroundColor,textFormat)",
+                    }
+                })
+        if requests:
+            self._spreadsheet.batch_update({"requests": requests})
+
     def _color_priority_column(
         self, ws: gspread.Worksheet, col_index: int, rows: list[list[Any]]
     ) -> None:
@@ -110,6 +140,7 @@ class SheetsOutput:
                 rank,
                 v.get("vendor_name", ""),
                 v.get("priority_band", ""),
+                "\u2b06 Yes" if v.get("vendor_id", "") in config.VENDOR_OVERRIDES else "\u2014",
                 v.get("vendor_score", 0),
                 v.get("exposure_score", 0),
                 v.get("urgency_score", 0),
@@ -126,6 +157,7 @@ class SheetsOutput:
         ws.update([VENDOR_HEADERS] + rows, value_input_option="USER_ENTERED")
         self._apply_header_format(ws, len(VENDOR_HEADERS))
         self._color_priority_column(ws, col_index=3, rows=rows)
+        self._color_boosted_column(ws, col_index=4, rows=rows)
         ws.update_cell(len(rows) + 3, 1, f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"Vendor Priority updated — {len(vendors)} vendors.")
 
