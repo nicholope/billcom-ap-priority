@@ -1,22 +1,21 @@
 {
-  "_comment": "Per-vendor score overrides. Key = Bill.com vendor ID. Any omitted field falls back to the global weights in config.py. To find a vendor ID, check the Bill.com UI or the vendor_id column in the Google Sheet output.",
+  "_comment": "Per-vendor score overrides. Key = Bill.com vendor ID. Any omitted field falls back to the global weights in config.py. To find a vendor ID, check the Vendor ID column in the Google Sheet output.",
   "_schema": {
     "weight_exposure":       "0.0–1.0  — replaces WEIGHT_EXPOSURE for this vendor",
     "weight_urgency":        "0.0–1.0  — replaces WEIGHT_URGENCY for this vendor",
     "weight_concentration":  "0.0–1.0  — replaces WEIGHT_CONCENTRATION for this vendor",
     "score_multiplier":      ">0       — final score multiplier (1.0 = no change, 1.25 = +25%)"
   },
-  "_examples_remove_before_use": {
-    "0YnAFGHJKL1234567890": {
-      "_note": "Strategic vendor — weight urgency heavily",
-      "weight_exposure": 0.30,
-      "weight_urgency": 0.55,
-      "weight_concentration": 0.15,
-      "score_multiplier": 1.0
-    },
-    "0YnAFGHJKL0987654321": {
-      "_note": "Simple bump — client requested this vendor always rank higher",
-      "score_multiplier": 1.25
-    }
+  "00901FUYHECHTVYil3vg": {
+    "score_multiplier": 1.25
+  },
+  "00901MMDDPPYZX3d54er": {
+    "score_multiplier": 1.25
+  },
+  "00901WQBPCDNSP3ckbuy": {
+    "score_multiplier": 1.25
+  },
+  "00901BYMXKOQLF3hgziz": {
+    "score_multiplier": 1.25
   }
 }
